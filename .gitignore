@@ -1,0 +1,15 @@
+# Build output (every CMake preset builds into build/<preset-name>)
+/build/
+
+# IDE / editor state
+/.vs/
+/.vscode/
+/.idea/
+/.cache/
+*.swp
+
+# Local, per-developer CMake presets
+/CMakeUserPresets.json
+
+# Compilation database symlink/copy used by clangd
+/compile_commands.json

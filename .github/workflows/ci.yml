@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  # Keep in sync with the clang version used for local development, so that
+  # clang-format and clang-tidy give the same results everywhere.
+  LLVM_VERSION: 23
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows (clang)
+            os: windows-2025
+            preset: windows-clang
+          - name: Linux (clang)
+            os: ubuntu-24.04
+            preset: linux-clang
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install clang and Ninja (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          wget -q https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh "$LLVM_VERSION" all
+          sudo apt-get install -y ninja-build
+          # Expose the unversioned tool names (clang, clang++, ld.lld, clang-format, clang-tidy).
+          echo "/usr/lib/llvm-$LLVM_VERSION/bin" >> "$GITHUB_PATH"
+
+      - name: Install clang and Ninja (Windows)
+        if: runner.os == 'Windows'
+        run: choco install llvm ninja --no-progress -y
+
+      - name: Check formatting
+        if: runner.os == 'Linux'
+        run: git ls-files '*.hpp' '*.cpp' | xargs clang-format --dry-run --Werror
+
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }} -DMAGE_WARNINGS_AS_ERRORS=ON -DMAGE_ENABLE_CLANG_TIDY=ON
+
+      - name: Build (Debug)
+        run: cmake --build --preset ${{ matrix.preset }}-debug
+
+      - name: Test (Debug)
+        run: ctest --preset ${{ matrix.preset }}-debug
+
+      - name: Build (Release)
+        run: cmake --build --preset ${{ matrix.preset }}-release
+
+      - name: Test (Release)
+        run: ctest --preset ${{ matrix.preset }}-release

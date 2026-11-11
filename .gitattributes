@@ -1,0 +1,9 @@
+# Store and check out every text file with LF line endings on all platforms,
+# so clang-format and diffs behave identically on Windows and Linux.
+* text=auto eol=lf
+
+*.png  binary
+*.jpg  binary
+*.ktx2 binary
+*.glb  binary
+*.spv  binary

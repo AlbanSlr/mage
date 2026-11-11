@@ -1,0 +1,76 @@
+# MAGE formatting rules. See docs/CODING_STYLE.md for the conventions that
+# a formatter cannot enforce (naming, comments, file layout).
+---
+Language: Cpp
+BasedOnStyle: LLVM
+Standard: c++20
+
+# --- Layout ---------------------------------------------------------------
+ColumnLimit: 120
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ContinuationIndentWidth: 4
+BreakBeforeBraces: Allman
+NamespaceIndentation: All
+FixNamespaceComments: true
+AccessModifierOffset: -4
+IndentCaseLabels: true
+IndentPPDirectives: BeforeHash
+InsertNewlineAtEOF: true
+MaxEmptyLinesToKeep: 1
+KeepEmptyLinesAtTheStartOfBlocks: false
+SeparateDefinitionBlocks: Always
+EmptyLineBeforeAccessModifier: LogicalBlock
+
+# --- Braces and short constructs ------------------------------------------
+# Every control statement gets braces and its own lines: explicit over compact.
+InsertBraces: true
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Empty
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortLambdasOnASingleLine: Inline
+AllowShortEnumsOnASingleLine: false
+
+# --- Alignment ------------------------------------------------------------
+PointerAlignment: Left
+ReferenceAlignment: Left
+QualifierAlignment: Left
+AlignConsecutiveDeclarations:
+  Enabled: true
+  AlignFunctionDeclarations: false
+AlignConsecutiveAssignments: None
+AlignEscapedNewlines: Left
+AlignTrailingComments:
+  Kind: Always
+AlignAfterOpenBracket: Align
+AlignOperands: Align
+
+# --- Breaking -------------------------------------------------------------
+BreakTemplateDeclarations: Yes
+BreakConstructorInitializers: BeforeComma
+PackConstructorInitializers: Never
+BreakInheritanceList: BeforeComma
+BinPackArguments: false
+BinPackParameters: OnePerLine
+BreakBeforeBinaryOperators: NonAssignment
+SpaceAfterTemplateKeyword: true
+Cpp11BracedListStyle: true
+
+# --- Includes -------------------------------------------------------------
+# Order: matching header, local "quoted" headers, MAGE headers, third-party
+# headers, then the C++ standard library. Each group is separated by a blank line.
+SortIncludes: CaseSensitive
+IncludeBlocks: Regroup
+IncludeCategories:
+  - Regex: '^".*"'
+    Priority: 1
+  - Regex: '^<mage/'
+    Priority: 2
+  - Regex: '^<[a-z_]+>$'
+    Priority: 4
+  - Regex: '^<.*>'
+    Priority: 3
+...

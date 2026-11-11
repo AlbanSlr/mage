@@ -1,0 +1,3 @@
+# Engine modules, listed from the lowest layer to the highest.
+# A module may only depend on modules listed above it.
+add_subdirectory(core)

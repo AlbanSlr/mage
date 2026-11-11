@@ -1,0 +1,82 @@
+# MAGE static analysis and naming rules. See docs/CODING_STYLE.md.
+# Run through CMake with -DMAGE_ENABLE_CLANG_TIDY=ON (only engine and app
+# targets are analysed, never third_party).
+---
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-exception-escape,
+  clang-analyzer-*,
+  cppcoreguidelines-init-variables,
+  cppcoreguidelines-prefer-member-initializer,
+  cppcoreguidelines-pro-type-member-init,
+  cppcoreguidelines-slicing,
+  cppcoreguidelines-special-member-functions,
+  cppcoreguidelines-virtual-class-destructor,
+  misc-const-correctness,
+  misc-definitions-in-headers,
+  misc-redundant-expression,
+  misc-unused-parameters,
+  misc-unused-using-decls,
+  modernize-*,
+  -modernize-use-trailing-return-type,
+  performance-*,
+  readability-braces-around-statements,
+  readability-const-return-type,
+  readability-container-size-empty,
+  readability-else-after-return,
+  readability-identifier-naming,
+  readability-implicit-bool-conversion,
+  readability-inconsistent-declaration-parameter-name,
+  readability-make-member-function-const,
+  readability-qualified-auto,
+  readability-redundant-*,
+  readability-simplify-boolean-expr
+
+HeaderFilterRegex: '(engine|apps)[/\\].*'
+FormatStyle: file
+
+CheckOptions:
+  # --- Types: PascalCase ---
+  - { key: readability-identifier-naming.ClassCase,             value: CamelCase }
+  - { key: readability-identifier-naming.StructCase,            value: CamelCase }
+  - { key: readability-identifier-naming.UnionCase,             value: CamelCase }
+  - { key: readability-identifier-naming.EnumCase,              value: CamelCase }
+  - { key: readability-identifier-naming.TypeAliasCase,         value: CamelCase }
+  - { key: readability-identifier-naming.TypedefCase,           value: CamelCase }
+  - { key: readability-identifier-naming.ConceptCase,           value: CamelCase }
+  - { key: readability-identifier-naming.TemplateParameterCase, value: CamelCase }
+  - { key: readability-identifier-naming.EnumConstantCase,      value: CamelCase }
+
+  # --- Namespaces: lower_case ---
+  - { key: readability-identifier-naming.NamespaceCase,         value: lower_case }
+
+  # --- Functions and variables: camelCase ---
+  - { key: readability-identifier-naming.FunctionCase,          value: camelBack }
+  - { key: readability-identifier-naming.MethodCase,            value: camelBack }
+  - { key: readability-identifier-naming.VariableCase,          value: camelBack }
+  - { key: readability-identifier-naming.ParameterCase,         value: camelBack }
+  - { key: readability-identifier-naming.LocalVariableCase,     value: camelBack }
+  - { key: readability-identifier-naming.MemberCase,            value: camelBack }
+
+  # --- Members: m_ for private/protected, s_ for static, g_ for globals ---
+  - { key: readability-identifier-naming.PrivateMemberPrefix,   value: m_ }
+  - { key: readability-identifier-naming.ProtectedMemberPrefix, value: m_ }
+  - { key: readability-identifier-naming.ClassMemberCase,       value: camelBack }
+  - { key: readability-identifier-naming.ClassMemberPrefix,     value: s_ }
+  - { key: readability-identifier-naming.GlobalVariableCase,    value: camelBack }
+  - { key: readability-identifier-naming.GlobalVariablePrefix,  value: g_ }
+
+  # --- Constants and macros: UPPER_CASE ---
+  - { key: readability-identifier-naming.ConstexprVariableCase, value: UPPER_CASE }
+  - { key: readability-identifier-naming.GlobalConstantCase,    value: UPPER_CASE }
+  - { key: readability-identifier-naming.StaticConstantCase,    value: UPPER_CASE }
+  - { key: readability-identifier-naming.ClassConstantCase,     value: UPPER_CASE }
+  - { key: readability-identifier-naming.ClassConstantPrefix,   value: '' }
+  - { key: readability-identifier-naming.MacroDefinitionCase,   value: UPPER_CASE }
+  - { key: readability-identifier-naming.MacroDefinitionPrefix, value: MAGE_ }
+
+  - { key: readability-implicit-bool-conversion.AllowPointerConditions, value: true }
+  - { key: cppcoreguidelines-special-member-functions.AllowSoleDefaultDtor, value: true }
+...

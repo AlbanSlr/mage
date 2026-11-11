@@ -1,0 +1,66 @@
+{
+  "version": 8,
+  "cmakeMinimumRequired": { "major": 3, "minor": 29, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "clang-base",
+      "hidden": true,
+      "description": "Shared settings: clang + lld + Ninja Multi-Config on every platform.",
+      "generator": "Ninja Multi-Config",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "CMAKE_LINKER_TYPE": "LLD",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_CONFIGURATION_TYPES": "Debug;RelWithDebInfo;Release"
+      }
+    },
+    {
+      "name": "windows-clang",
+      "displayName": "Windows (clang)",
+      "inherits": "clang-base",
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
+    },
+    {
+      "name": "linux-clang",
+      "displayName": "Linux (clang)",
+      "inherits": "clang-base",
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" }
+    }
+  ],
+  "buildPresets": [
+    { "name": "windows-clang-debug", "configurePreset": "windows-clang", "configuration": "Debug" },
+    { "name": "windows-clang-relwithdebinfo", "configurePreset": "windows-clang", "configuration": "RelWithDebInfo" },
+    { "name": "windows-clang-release", "configurePreset": "windows-clang", "configuration": "Release" },
+    { "name": "linux-clang-debug", "configurePreset": "linux-clang", "configuration": "Debug" },
+    { "name": "linux-clang-relwithdebinfo", "configurePreset": "linux-clang", "configuration": "RelWithDebInfo" },
+    { "name": "linux-clang-release", "configurePreset": "linux-clang", "configuration": "Release" }
+  ],
+  "testPresets": [
+    {
+      "name": "windows-clang-debug",
+      "configurePreset": "windows-clang",
+      "configuration": "Debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "windows-clang-release",
+      "configurePreset": "windows-clang",
+      "configuration": "Release",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "linux-clang-debug",
+      "configurePreset": "linux-clang",
+      "configuration": "Debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "linux-clang-release",
+      "configurePreset": "linux-clang",
+      "configuration": "Release",
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}
