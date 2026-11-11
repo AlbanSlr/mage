@@ -1,22 +1,24 @@
-#include "FlyCameraController.hpp"
-
 #include <mage/core/Math.hpp>
 #include <mage/platform/Input.hpp>
 #include <mage/platform/Window.hpp>
 #include <mage/renderer/Camera.hpp>
 
+#include <shared/FlyCameraController.hpp>
+
 #include <algorithm>
 
 void FlyCameraController::update(mage::platform::Window& window,
                                  mage::renderer::Camera& camera,
-                                 float                   deltaTimeInSeconds)
+                                 float                   deltaTimeInSeconds,
+                                 FlyCameraPermissions    permissions)
 {
     using mage::platform::Key;
 
     // --- Look ------------------------------------------------------------------------
     // The mouse is captured only while the right button is held, so the cursor
     // stays usable the rest of the time.
-    const bool wantsToLook = window.isMouseButtonDown(mage::platform::MouseButton::Right);
+    const bool isRightButtonDown = window.isMouseButtonDown(mage::platform::MouseButton::Right);
+    const bool wantsToLook = isRightButtonDown && (m_isLooking || permissions.canStartLooking);
     if (wantsToLook != m_isLooking)
     {
         window.setMouseCaptured(wantsToLook);
@@ -35,6 +37,11 @@ void FlyCameraController::update(mage::platform::Window& window,
     }
 
     // --- Move ------------------------------------------------------------------------
+    if (!permissions.canMove)
+    {
+        return;
+    }
+
     glm::vec3 moveDirection{0.0F};
 
     if (window.isKeyDown(Key::W))
@@ -74,4 +81,9 @@ void FlyCameraController::update(mage::platform::Window& window,
 
         camera.position += glm::normalize(moveDirection) * moveSpeed * deltaTimeInSeconds;
     }
+}
+
+bool FlyCameraController::isLooking() const
+{
+    return m_isLooking;
 }

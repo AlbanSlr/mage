@@ -33,13 +33,14 @@ Replace `windows-clang` with `linux-clang` on Linux.
 cmake --preset windows-clang                 # configure (once)
 cmake --build --preset windows-clang-debug   # build
 ctest --preset windows-clang-debug           # run the unit tests
-build/windows-clang/bin/Debug/mage_sandbox   # run the sandbox
+build/windows-clang/bin/Debug/mage_editor    # run the editor
+build/windows-clang/bin/Debug/mage_sandbox   # run the sandbox (scene only, no editor)
 ```
 
 Available configurations: `debug`, `relwithdebinfo`, `release`.
 
-Sandbox controls: hold the right mouse button to look around, `W` `A` `S` `D` to move,
-`E` / `Q` to go up / down, `Shift` to move faster, `Escape` to quit. Keys are physical
+Camera controls (in the sandbox, and over the editor's viewport): hold the right mouse button to look around, `W` `A` `S` `D` to move,
+`E` / `Q` to go up / down, `Shift` to move faster; `Escape` quits the sandbox. Keys are physical
 positions, so they are `Z` `Q` `S` `D` and `E` / `A` on an AZERTY keyboard.
 
 | CMake option | Default | Effect |
@@ -52,7 +53,7 @@ positions, so they are `Z` `Q` `S` `D` and `E` / `A` on an AZERTY keyboard.
 
 ```
 engine/       engine modules (one static library each)
-apps/         executables: sandbox, later the editor
+apps/         executables: editor and sandbox, plus the code they share
 shaders/      Slang shader sources, compiled to SPIR-V at build time
 third_party/  dependencies, as git submodules
 cmake/        build helpers

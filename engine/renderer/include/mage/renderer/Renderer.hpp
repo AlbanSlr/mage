@@ -1,6 +1,7 @@
 #pragma once
 
 #include <mage/core/Math.hpp>
+#include <mage/platform/Window.hpp>
 #include <mage/renderer/Camera.hpp>
 #include <mage/renderer/Mesh.hpp>
 #include <mage/renderer/Texture.hpp>
@@ -11,11 +12,6 @@
 #include <string>
 #include <vector>
 
-namespace mage::platform
-{
-    class Window;
-}
-
 namespace mage::renderer
 {
     // The Vulkan classes are private to the renderer module (engine/renderer/src).
@@ -23,6 +19,7 @@ namespace mage::renderer
     // only uses the renderer.
     class MeshPipeline;
     class RenderResources;
+    class SceneRenderTarget;
     class VulkanAllocator;
     class VulkanDevice;
     class VulkanFrame;
@@ -31,10 +28,19 @@ namespace mage::renderer
     class VulkanInstance;
     class VulkanSurface;
     class VulkanSwapchain;
+    class VulkanUserInterfaceRenderer;
 
     struct RendererDescription
     {
         std::string applicationName = "MAGE Application";
+
+        // false: the scene is rendered directly into the window (a game).
+        //
+        // true: the scene is rendered into an offscreen image, and the window
+        // shows the Dear ImGui user interface, which can display that image
+        // in one of its panels (the editor). A ui::UserInterface must exist
+        // before the renderer is created and must outlive it.
+        bool enableUserInterface = false;
     };
 
     // A request to draw one mesh with one texture at one place in the world.
@@ -89,17 +95,41 @@ namespace mage::renderer
         // the window is minimised.
         void drawFrame(const FrameDescription& frameDescription);
 
+        // --- User interface mode ---------------------------------------------------
+        // Only valid when the renderer was created with `enableUserInterface`.
+
+        // Must be called once per frame BEFORE the interface is built
+        // (ui::UserInterface::beginFrame). Applies a pending change of the
+        // scene viewport size.
+        void beginUserInterfaceFrame();
+
+        // Requests the size, in pixels, of the offscreen image the scene is
+        // rendered into: typically the size of the panel that displays it.
+        // Takes effect at the next beginUserInterfaceFrame().
+        void setSceneViewportExtent(platform::PixelExtent extent);
+
+        [[nodiscard]] platform::PixelExtent sceneViewportExtent() const;
+
+        // Identifier of the scene image for Dear ImGui:
+        //     ImGui::Image(ImTextureRef(renderer.sceneViewportTextureId()), size);
+        // It changes when the viewport is resized, so it must be queried every
+        // frame after beginUserInterfaceFrame().
+        [[nodiscard]] std::uint64_t sceneViewportTextureId() const;
+
     private:
         // Number of frames the CPU may prepare while the GPU is still working
         // on earlier ones. Two keeps the CPU and GPU both busy without adding
         // more input latency.
         static constexpr std::uint32_t MAX_FRAMES_IN_FLIGHT = 2;
 
+        [[nodiscard]] bool isUserInterfaceEnabled() const;
+
         void updateFrameUniforms(const VulkanFrame& frame, const FrameDescription& frameDescription) const;
         void recordCommands(const VulkanFrame&      frame,
                             std::uint32_t           swapchainImageIndex,
                             const FrameDescription& frameDescription) const;
         void createDepthImage();
+        void createSceneRenderTarget(platform::PixelExtent extent);
         void recreateSwapchain();
 
         const platform::Window& m_window;
@@ -110,10 +140,27 @@ namespace mage::renderer
         std::unique_ptr<VulkanAllocator>         m_allocator;         //  4. GPU memory
         std::unique_ptr<VulkanImmediateCommands> m_immediateCommands; //  5. one-off GPU work (uploads)
         std::unique_ptr<VulkanSwapchain>         m_swapchain;         //  6. the images shown in the window
-        std::unique_ptr<VulkanImage>             m_depthImage;        //  7. the depth buffer, same size as those
-        std::unique_ptr<MeshPipeline>            m_meshPipeline;      //  8. how to draw
-        std::unique_ptr<RenderResources>         m_resources;         //  9. meshes, textures, descriptor pool
-        std::vector<VulkanFrame>                 m_frames;            // 10. per-frame commands, sync and uniforms
+
+        // 7. Where the scene is rendered. Exactly one of the two exists:
+        //    - direct mode: into the swapchain images, with this depth buffer;
+        //    - user interface mode: into an offscreen colour + depth target.
+        std::unique_ptr<VulkanImage>       m_depthImage;
+        std::unique_ptr<SceneRenderTarget> m_sceneRenderTarget;
+
+        std::unique_ptr<MeshPipeline>    m_meshPipeline; //  8. how to draw
+        std::unique_ptr<RenderResources> m_resources;    //  9. meshes, textures, descriptor pool
+        std::vector<VulkanFrame>         m_frames;       // 10. per-frame commands, sync and uniforms
+
+        // 11. Draws Dear ImGui. Null in direct mode.
+        std::unique_ptr<VulkanUserInterfaceRenderer> m_userInterfaceRenderer;
+
+        // Identifier under which the scene render target is registered with
+        // the user interface renderer.
+        std::uint64_t m_sceneViewportTextureId = 0;
+
+        // Viewport size requested by setSceneViewportExtent(), applied at the
+        // next beginUserInterfaceFrame().
+        platform::PixelExtent m_requestedSceneViewportExtent;
 
         // Index into m_frames of the frame being prepared; cycles 0, 1, 0, 1...
         std::uint32_t m_currentFrameIndex = 0;

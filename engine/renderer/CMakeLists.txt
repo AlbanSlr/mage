@@ -5,6 +5,7 @@ mage_add_module(renderer
         src/Renderer.cpp
         src/RenderResources.cpp
         src/vulkan/MeshPipeline.cpp
+        src/vulkan/SceneRenderTarget.cpp
         src/vulkan/VulkanAllocator.cpp
         src/vulkan/VulkanBuffer.cpp
         src/vulkan/VulkanDevice.cpp
@@ -17,12 +18,15 @@ mage_add_module(renderer
         src/vulkan/VulkanShaderModule.cpp
         src/vulkan/VulkanSurface.cpp
         src/vulkan/VulkanSwapchain.cpp
+        src/vulkan/VulkanUserInterfaceRenderer.cpp
     PUBLIC_DEPENDENCIES
         mage::core
         mage::platform
     PRIVATE_DEPENDENCIES
         Vulkan::Headers
         GPUOpen::VulkanMemoryAllocator
+        # Only for its Vulkan backend, which draws the user interface.
+        imgui::imgui
     TEST_SOURCES
         tests/CameraTests.cpp
         tests/PrimitivesTests.cpp

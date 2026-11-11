@@ -5,7 +5,6 @@
 #
 # Submodules that are checked out but not yet part of the build are wired in
 # by the milestone that first needs them:
-#   imgui  -> editor shell
 #   tracy  -> profiling
 
 # --- spdlog (logging backend of mage::core) ---------------------------------
@@ -42,6 +41,37 @@ add_subdirectory(SDL SYSTEM EXCLUDE_FROM_ALL)
 # SDL's own sources produce warnings with recent clang versions. They are not
 # ours to fix, so silence them to keep MAGE's build output readable.
 target_compile_options(SDL3-static PRIVATE -w)
+
+# --- Dear ImGui (editor and debug user interface) -----------------------------
+# Dear ImGui ships as plain source files without a build script, so its
+# library target is declared here: the core, plus the two "backends" MAGE uses
+# to connect it to SDL3 (input, windows) and to Vulkan (drawing).
+set(MAGE_IMGUI_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/imgui")
+
+add_library(imgui STATIC
+    "${MAGE_IMGUI_DIRECTORY}/imgui.cpp"
+    "${MAGE_IMGUI_DIRECTORY}/imgui_demo.cpp"
+    "${MAGE_IMGUI_DIRECTORY}/imgui_draw.cpp"
+    "${MAGE_IMGUI_DIRECTORY}/imgui_tables.cpp"
+    "${MAGE_IMGUI_DIRECTORY}/imgui_widgets.cpp"
+    "${MAGE_IMGUI_DIRECTORY}/backends/imgui_impl_sdl3.cpp"
+    "${MAGE_IMGUI_DIRECTORY}/backends/imgui_impl_vulkan.cpp"
+)
+add_library(imgui::imgui ALIAS imgui)
+
+target_include_directories(imgui SYSTEM PUBLIC
+    "${MAGE_IMGUI_DIRECTORY}"
+    "${MAGE_IMGUI_DIRECTORY}/backends"
+)
+target_link_libraries(imgui PUBLIC SDL3::SDL3 Vulkan::Headers)
+target_compile_definitions(imgui PUBLIC
+    # MAGE does not link against the Vulkan library: the Vulkan backend is
+    # given a function to look up the Vulkan functions at runtime instead.
+    IMGUI_IMPL_VULKAN_NO_PROTOTYPES
+    # Compile errors instead of silently using functions Dear ImGui has retired.
+    IMGUI_DISABLE_OBSOLETE_FUNCTIONS
+)
+target_compile_options(imgui PRIVATE -w)
 
 # --- Catch2 (unit tests) ----------------------------------------------------
 if(MAGE_BUILD_TESTS)

@@ -12,6 +12,19 @@ namespace mage::renderer
     struct Camera;
 }
 
+// What the controller is allowed to do this frame. An application that shares
+// the mouse and keyboard with a user interface uses it to keep camera input
+// from firing while the user interacts with a panel.
+struct FlyCameraPermissions
+{
+    // Pressing the right mouse button may start looking around. Looking that
+    // has already started always continues until the button is released.
+    bool canStartLooking = true;
+
+    // The movement keys move the camera.
+    bool canMove = true;
+};
+
 // Moves a camera like a free-flying drone:
 //
 //   hold right mouse button + move the mouse   look around
@@ -28,7 +41,13 @@ public:
     // Reads the input state of `window` and moves `camera` accordingly.
     // `deltaTimeInSeconds` is the duration of the previous frame, which makes
     // the movement speed independent of the frame rate.
-    void update(mage::platform::Window& window, mage::renderer::Camera& camera, float deltaTimeInSeconds);
+    void update(mage::platform::Window& window,
+                mage::renderer::Camera& camera,
+                float                   deltaTimeInSeconds,
+                FlyCameraPermissions    permissions = {});
+
+    // True while the right mouse button is held and the mouse is captured.
+    [[nodiscard]] bool isLooking() const;
 
 private:
     static constexpr float MOVE_SPEED_IN_UNITS_PER_SECOND = 3.0F;

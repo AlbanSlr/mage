@@ -14,6 +14,7 @@
 #include <format>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 namespace mage::platform
 {
@@ -113,6 +114,11 @@ namespace mage::platform
         SDL_Event event;
         while (SDL_PollEvent(&event))
         {
+            if (m_nativeEventHandler)
+            {
+                m_nativeEventHandler(event);
+            }
+
             switch (event.type)
             {
                 // SDL_EVENT_QUIT covers "the application was asked to quit"
@@ -192,6 +198,11 @@ namespace mage::platform
         {
             log::warning("Failed to change the mouse capture mode: {}", SDL_GetError());
         }
+    }
+
+    void Window::setNativeEventHandler(NativeEventHandler handler)
+    {
+        m_nativeEventHandler = std::move(handler);
     }
 
     SDL_Window* Window::nativeHandle() const

@@ -21,6 +21,12 @@ namespace mage::renderer
         // Which part of the pixel data views of this image give access to:
         // colour for textures, depth for depth buffers.
         vk::ImageAspectFlags aspect = vk::ImageAspectFlagBits::eColor;
+
+        // Optional second format the image can be viewed with. When set, the
+        // image gets an additional view (VulkanImage::alternateView) that
+        // reinterprets the same bytes with this format. The two formats must
+        // have the same size per pixel.
+        vk::Format alternateViewFormat = vk::Format::eUndefined;
     };
 
     // A 2D IMAGE created by the engine (as opposed to swapchain images, which
@@ -42,6 +48,9 @@ namespace mage::renderer
 
         [[nodiscard]] vk::Image handle() const;
         [[nodiscard]] vk::ImageView view() const;
+
+        // Only valid if the image was created with an alternateViewFormat.
+        [[nodiscard]] vk::ImageView alternateView() const;
         [[nodiscard]] vk::Format format() const;
         [[nodiscard]] vk::Extent2D extent() const;
 
@@ -53,6 +62,7 @@ namespace mage::renderer
         VmaAllocation m_allocation = nullptr;
 
         vk::raii::ImageView m_view = nullptr;
+        vk::raii::ImageView m_alternateView = nullptr;
 
         vk::Format   m_format = vk::Format::eUndefined;
         vk::Extent2D m_extent;

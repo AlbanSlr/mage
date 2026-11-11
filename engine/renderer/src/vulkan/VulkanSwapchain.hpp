@@ -10,6 +10,21 @@ namespace mage::renderer
     class VulkanDevice;
     class VulkanSurface;
 
+    // How colour values written to the swapchain images are stored.
+    enum class SwapchainColorEncoding : std::uint8_t
+    {
+        // sRGB format: shaders output LINEAR colours and the GPU applies the
+        // sRGB encoding when storing them. Used when the 3D scene is rendered
+        // straight into the swapchain.
+        Srgb,
+
+        // UNORM format: values are stored exactly as written. Used when the
+        // user interface is drawn into the swapchain, because Dear ImGui
+        // produces colours that are already sRGB encoded; an sRGB format
+        // would encode them a second time and wash the interface out.
+        Unorm,
+    };
+
     // The images that are shown in the window.
     //
     // Vulkan has no "default framebuffer". To display something, the
@@ -25,7 +40,10 @@ namespace mage::renderer
     {
     public:
         // `desiredExtent` is the framebuffer size of the window, in pixels.
-        VulkanSwapchain(const VulkanDevice& device, const VulkanSurface& surface, vk::Extent2D desiredExtent);
+        VulkanSwapchain(const VulkanDevice&    device,
+                        const VulkanSurface&   surface,
+                        vk::Extent2D           desiredExtent,
+                        SwapchainColorEncoding colorEncoding);
 
         // Replaces the swapchain by a new one matching `desiredExtent`.
         // The caller must make sure the GPU no longer uses the current images
@@ -52,6 +70,7 @@ namespace mage::renderer
 
         [[nodiscard]] vk::SwapchainKHR handle() const;
         [[nodiscard]] vk::Format imageFormat() const;
+        [[nodiscard]] std::uint32_t imageCount() const;
         [[nodiscard]] vk::Extent2D extent() const;
 
         [[nodiscard]] vk::Image image(std::uint32_t imageIndex) const;
@@ -84,7 +103,8 @@ namespace mage::renderer
 
         std::vector<vk::raii::Semaphore> m_renderFinishedSemaphores;
 
-        vk::SurfaceFormatKHR m_surfaceFormat;
-        vk::Extent2D         m_extent;
+        SwapchainColorEncoding m_colorEncoding;
+        vk::SurfaceFormatKHR   m_surfaceFormat;
+        vk::Extent2D           m_extent;
     };
 } // namespace mage::renderer

@@ -3,11 +3,13 @@
 #include <mage/platform/Input.hpp>
 
 #include <cstdint>
+#include <functional>
 #include <string>
 
 // Forward declaration of SDL's window type, so this header does not need to
 // include any SDL header.
 struct SDL_Window;
+union SDL_Event; // NOLINT(readability-identifier-naming): the name is SDL's, not ours.
 
 namespace mage::platform
 {
@@ -78,13 +80,24 @@ namespace mage::platform
         // camera needs to keep turning without the cursor hitting a screen edge.
         void setMouseCaptured(bool captured);
 
+        // --- Backend access ---------------------------------------------------------
+        // For the few pieces of code that must talk to SDL directly, such as
+        // the SDL backend of the user interface library.
+
+        using NativeEventHandler = std::function<void(const SDL_Event& event)>;
+
+        // The handler is called with every SDL event during pollEvents(),
+        // before the window processes it. Pass nullptr to remove it.
+        void setNativeEventHandler(NativeEventHandler handler);
+
         // The underlying SDL window, for code that must talk to SDL directly.
         [[nodiscard]] SDL_Window* nativeHandle() const;
 
     private:
-        SDL_Window* m_sdlWindow = nullptr;
-        MouseMotion m_mouseMotion;
-        bool        m_closeRequested = false;
-        bool        m_minimized = false;
+        SDL_Window*        m_sdlWindow = nullptr;
+        MouseMotion        m_mouseMotion;
+        NativeEventHandler m_nativeEventHandler;
+        bool               m_closeRequested = false;
+        bool               m_minimized = false;
     };
 } // namespace mage::platform

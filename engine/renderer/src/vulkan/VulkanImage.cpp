@@ -4,8 +4,12 @@
 #include "vulkan/VulkanApi.hpp"
 #include "vulkan/VulkanDevice.hpp"
 
+#include <mage/core/Assert.hpp>
+
 #include <vk_mem_alloc.h>
 
+#include <array>
+#include <cstdint>
 #include <format>
 #include <stdexcept>
 #include <utility>
@@ -19,7 +23,21 @@ namespace mage::renderer
         , m_format(description.format)
         , m_extent(description.extent)
     {
+        // By default a view must use the exact format of its image. The
+        // "mutable format" flag lifts that restriction; listing the formats
+        // that will actually be used lets the driver keep its optimisations.
+        const bool hasAlternateViewFormat = description.alternateViewFormat != vk::Format::eUndefined;
+
+        const std::array<vk::Format, 2> viewFormats = {description.format, description.alternateViewFormat};
+
+        const vk::ImageFormatListCreateInfo viewFormatList{
+            .viewFormatCount = static_cast<std::uint32_t>(viewFormats.size()),
+            .pViewFormats = viewFormats.data(),
+        };
+
         const vk::ImageCreateInfo imageCreateInfo{
+            .pNext = hasAlternateViewFormat ? &viewFormatList : nullptr,
+            .flags = hasAlternateViewFormat ? vk::ImageCreateFlagBits::eMutableFormat : vk::ImageCreateFlags{},
             .imageType = vk::ImageType::e2D,
             .format = description.format,
 
@@ -77,6 +95,13 @@ namespace mage::renderer
         try
         {
             m_view = device.logicalDevice().createImageView(viewCreateInfo);
+
+            if (hasAlternateViewFormat)
+            {
+                vk::ImageViewCreateInfo alternateViewCreateInfo = viewCreateInfo;
+                alternateViewCreateInfo.format = description.alternateViewFormat;
+                m_alternateView = device.logicalDevice().createImageView(alternateViewCreateInfo);
+            }
         }
         catch (...)
         {
@@ -97,6 +122,7 @@ namespace mage::renderer
         , m_image(std::exchange(other.m_image, VK_NULL_HANDLE))
         , m_allocation(std::exchange(other.m_allocation, nullptr))
         , m_view(std::move(other.m_view))
+        , m_alternateView(std::move(other.m_alternateView))
         , m_format(other.m_format)
         , m_extent(other.m_extent)
     {
@@ -112,6 +138,7 @@ namespace mage::renderer
             m_image = std::exchange(other.m_image, VK_NULL_HANDLE);
             m_allocation = std::exchange(other.m_allocation, nullptr);
             m_view = std::move(other.m_view);
+            m_alternateView = std::move(other.m_alternateView);
             m_format = other.m_format;
             m_extent = other.m_extent;
         }
@@ -120,9 +147,10 @@ namespace mage::renderer
 
     void VulkanImage::destroy()
     {
-        // The view refers to the image and must be destroyed first. Member
+        // The views refer to the image and must be destroyed first. Member
         // destructors would run too late (after this function), so the view
         // is released explicitly.
+        m_alternateView.clear();
         m_view.clear();
 
         // A moved-from image owns nothing.
@@ -137,6 +165,12 @@ namespace mage::renderer
     vk::Image VulkanImage::handle() const
     {
         return vk::Image(m_image);
+    }
+
+    vk::ImageView VulkanImage::alternateView() const
+    {
+        MAGE_ASSERT(*m_alternateView, "This image was created without an alternate view format");
+        return *m_alternateView;
     }
 
     vk::ImageView VulkanImage::view() const

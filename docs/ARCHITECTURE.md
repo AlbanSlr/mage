@@ -12,11 +12,12 @@ to compile instead of creating a hidden cycle.
 
 | Module | Responsibility | Depends on | Status |
 |---|---|---|---|
-| `apps/editor`, `apps/sandbox` | Executables | runtime (sandbox: renderer, for now) | sandbox exists |
+| `apps/editor`, `apps/sandbox` | Executables | runtime (for now: renderer, ui) | both exist |
 | `runtime` | Application loop, layer stack | all modules below | planned |
 | `scene` | Components, transform hierarchy, serialization | core, ecs, assets | planned |
 | `assets` | Importers, asset registry and cache | core, renderer | planned |
-| `renderer` | Vulkan device, swapchain, resources, pipelines | core, platform | exists (textured, lit meshes) |
+| `ui` | Dear ImGui context and its SDL3 platform backend | core, platform | exists |
+| `renderer` | Vulkan device, swapchain, resources, pipelines | core, platform | exists (textured, lit meshes, offscreen scene, user interface) |
 | `ecs` | Custom entity-component-system | core | planned |
 | `platform` | SDL3 window, input, filesystem | core | exists (window, input, Vulkan surface) |
 | `core` | Logging, assertions, math, file reading, platform detection | — | exists |
@@ -54,6 +55,8 @@ Vulkan is brought up:
 | `VulkanSwapchain` | Swapchain images, image views, recreation on resize |
 | `VulkanFrame` | Command pool and buffer, semaphore, fence, uniform buffer and descriptor set of one frame in flight |
 | `VulkanShaderModule` | Loading SPIR-V |
+| `SceneRenderTarget` | Offscreen rendering, and viewing one image with two formats |
+| `VulkanUserInterfaceRenderer` | Dear ImGui's Vulkan backend: drawing the interface, exposing images to it |
 | `MeshPipeline` | Descriptor set layouts, pipeline layout, vertex input, depth test, graphics pipeline |
 | `../RenderResources` | Staging uploads of meshes and textures, descriptor pool, sampler |
 | `../Renderer.cpp` | The frame loop: acquire, update uniforms, record, submit, present |
@@ -69,6 +72,32 @@ Shader data is organised by how often it changes:
 Shaders are written in Slang (`shaders/`), compiled to SPIR-V by `slangc` at build
 time (`cmake/MageShaders.cmake`) and loaded from the `shaders` folder next to the
 executable.
+
+## Rendering modes
+
+`RendererDescription::enableUserInterface` selects one of two frame layouts:
+
+| | Direct mode (sandbox, games) | User interface mode (editor) |
+|---|---|---|
+| Scene pass renders into | the swapchain image | an offscreen `SceneRenderTarget` |
+| Second pass | none | Dear ImGui into the swapchain image |
+| Swapchain format | sRGB (the GPU encodes) | UNORM (Dear ImGui writes encoded colours) |
+
+In user interface mode the scene image is rendered through an sRGB view and
+displayed through a UNORM view of the same image, so the encoded colours reach
+the screen unchanged. Each frame of the editor runs in this order:
+
+```
+window.pollEvents();                  // input, also forwarded to Dear ImGui
+renderer.beginUserInterfaceFrame();   // applies a pending viewport resize
+userInterface.beginFrame();
+editor.update(deltaTime);             // ImGui:: calls describing the interface
+userInterface.endFrame();
+renderer.drawFrame(frameDescription); // scene offscreen, then the interface
+```
+
+Object lifetime follows the same dependency order: window, `ui::UserInterface`,
+renderer, editor; destroyed in reverse.
 
 ## Conventions
 
@@ -92,7 +121,7 @@ built from source with the same compiler as the engine.
 | VulkanMemoryAllocator | v3.5.0 | GPU memory allocation | yes |
 | SDL | release-3.4.20 | Window, input, Vulkan surface | yes |
 | glm | 1.0.3 | Math | yes |
-| imgui | v1.93.0-docking | Editor UI | from editor shell |
+| imgui | v1.93.0-docking | Editor UI | yes |
 | tracy | v0.15.0 | Profiling | when first needed |
 
 The Vulkan SDK is still required on the machine for the validation layers and
@@ -103,7 +132,7 @@ the `slangc` shader compiler; the engine itself does not link against it.
 1. **Scaffold** — repository, build system, style tooling, `core`, tests, CI. *(done)*
 2. **Vulkan bring-up** — instance, validation, device, swapchain, frame loop, first triangle. *(done)*
 3. **GPU resources** — VMA, buffers, textures, descriptors, Slang build step, depth, camera. *(done)*
-4. **Editor shell** — ImGui docking, scene rendered offscreen into a viewport panel.
+4. **Editor shell** — ImGui docking, scene rendered offscreen into a viewport panel. *(done)*
 5. **ECS and scene** — custom sparse-set ECS, transforms, serialization, hierarchy and inspector.
 6. **Assets** — glTF import, asset handles, content browser.
 7. **Rendering features** — PBR, lights, shadows, image-based lighting, HDR, render graph.

@@ -20,14 +20,20 @@ namespace mage::renderer
         // The surface format is the pixel format of the swapchain images plus
         // the colour space the display interprets them in.
         //
-        // An sRGB format is preferred: shaders then work with linear colour
-        // values and the GPU applies the sRGB encoding when writing the pixel,
-        // which is what a standard monitor expects.
-        vk::SurfaceFormatKHR chooseSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats)
+        // Either way the display expects sRGB encoded values (the
+        // SrgbNonlinear colour space). What changes with the format is who
+        // does the encoding: the GPU (Srgb) or whoever writes the pixels
+        // (Unorm). See SwapchainColorEncoding.
+        vk::SurfaceFormatKHR chooseSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats,
+                                                 SwapchainColorEncoding                   colorEncoding)
         {
+            const vk::Format preferredFormat = (colorEncoding == SwapchainColorEncoding::Srgb)
+                                                   ? vk::Format::eB8G8R8A8Srgb
+                                                   : vk::Format::eB8G8R8A8Unorm;
+
             for (const vk::SurfaceFormatKHR& availableFormat : availableFormats)
             {
-                if (availableFormat.format == vk::Format::eB8G8R8A8Srgb
+                if (availableFormat.format == preferredFormat
                     && availableFormat.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
                 {
                     return availableFormat;
@@ -74,11 +80,13 @@ namespace mage::renderer
         }
     } // namespace
 
-    VulkanSwapchain::VulkanSwapchain(const VulkanDevice&  device,
-                                     const VulkanSurface& surface,
-                                     vk::Extent2D         desiredExtent)
+    VulkanSwapchain::VulkanSwapchain(const VulkanDevice&    device,
+                                     const VulkanSurface&   surface,
+                                     vk::Extent2D           desiredExtent,
+                                     SwapchainColorEncoding colorEncoding)
         : m_device(device)
         , m_surface(surface)
+        , m_colorEncoding(colorEncoding)
     {
         create(desiredExtent, nullptr);
     }
@@ -109,7 +117,7 @@ namespace mage::renderer
 
         MAGE_ASSERT(!surfaceFormats.empty(), "A surface always supports at least one format");
 
-        m_surfaceFormat = chooseSurfaceFormat(surfaceFormats);
+        m_surfaceFormat = chooseSurfaceFormat(surfaceFormats, m_colorEncoding);
         m_extent = chooseExtent(capabilities, desiredExtent);
 
         // --- 2. Create the swapchain ---------------------------------------------
@@ -210,6 +218,11 @@ namespace mage::renderer
     vk::Format VulkanSwapchain::imageFormat() const
     {
         return m_surfaceFormat.format;
+    }
+
+    std::uint32_t VulkanSwapchain::imageCount() const
+    {
+        return static_cast<std::uint32_t>(m_images.size());
     }
 
     vk::Extent2D VulkanSwapchain::extent() const
