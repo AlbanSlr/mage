@@ -33,10 +33,14 @@ Replace `windows-clang` with `linux-clang` on Linux.
 cmake --preset windows-clang                 # configure (once)
 cmake --build --preset windows-clang-debug   # build
 ctest --preset windows-clang-debug           # run the unit tests
-build/windows-clang/bin/Debug/mage_sandbox   # run the sandbox (shows a triangle)
+build/windows-clang/bin/Debug/mage_sandbox   # run the sandbox
 ```
 
 Available configurations: `debug`, `relwithdebinfo`, `release`.
+
+Sandbox controls: hold the right mouse button to look around, `W` `A` `S` `D` to move,
+`E` / `Q` to go up / down, `Shift` to move faster, `Escape` to quit. Keys are physical
+positions, so they are `Z` `Q` `S` `D` and `E` / `A` on an AZERTY keyboard.
 
 | CMake option | Default | Effect |
 |---|---|---|

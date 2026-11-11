@@ -5,9 +5,8 @@
 #
 # Submodules that are checked out but not yet part of the build are wired in
 # by the milestone that first needs them:
-#   VulkanMemoryAllocator, glm  -> GPU resources / camera
-#   imgui                       -> editor shell
-#   tracy                       -> profiling
+#   imgui  -> editor shell
+#   tracy  -> profiling
 
 # --- spdlog (logging backend of mage::core) ---------------------------------
 # Use std::format instead of the bundled fmt library, so MAGE has a single
@@ -20,6 +19,16 @@ add_subdirectory(spdlog SYSTEM)
 # library at build time: the Vulkan loader (vulkan-1.dll / libvulkan.so.1,
 # installed with the GPU driver) is opened at runtime by vk::raii::Context.
 add_subdirectory(Vulkan-Headers SYSTEM)
+
+# --- Vulkan Memory Allocator (GPU memory allocation) -------------------------
+# Header-only target GPUOpen::VulkanMemoryAllocator. Its implementation is
+# compiled once, in engine/renderer/src/vulkan/VulkanMemoryAllocatorImplementation.cpp.
+add_subdirectory(VulkanMemoryAllocator SYSTEM)
+
+# --- GLM (vector and matrix math) ---------------------------------------------
+# Used header-only; its configuration macros are set on mage::core.
+set(GLM_BUILD_LIBRARY OFF CACHE BOOL "" FORCE)
+add_subdirectory(glm SYSTEM)
 
 # --- SDL3 (window, input, Vulkan surface creation) ---------------------------
 # Built as a static library so the engine has no SDL3.dll to ship or locate.

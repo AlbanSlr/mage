@@ -1,9 +1,13 @@
 #include <mage/core/Log.hpp>
+#include <mage/platform/Input.hpp>
 #include <mage/platform/Window.hpp>
 
 #include <SDL3/SDL_error.h>
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_init.h>
+#include <SDL3/SDL_keyboard.h>
+#include <SDL3/SDL_mouse.h>
+#include <SDL3/SDL_scancode.h>
 #include <SDL3/SDL_video.h>
 
 #include <cstdint>
@@ -13,6 +17,53 @@
 
 namespace mage::platform
 {
+    namespace
+    {
+        // A scancode identifies a physical key position, independently of the
+        // keyboard layout (see the comment on platform::Key).
+        SDL_Scancode toSdlScancode(Key key)
+        {
+            switch (key)
+            {
+                case Key::W:
+                    return SDL_SCANCODE_W;
+                case Key::A:
+                    return SDL_SCANCODE_A;
+                case Key::S:
+                    return SDL_SCANCODE_S;
+                case Key::D:
+                    return SDL_SCANCODE_D;
+                case Key::Q:
+                    return SDL_SCANCODE_Q;
+                case Key::E:
+                    return SDL_SCANCODE_E;
+                case Key::Space:
+                    return SDL_SCANCODE_SPACE;
+                case Key::LeftShift:
+                    return SDL_SCANCODE_LSHIFT;
+                case Key::LeftControl:
+                    return SDL_SCANCODE_LCTRL;
+                case Key::Escape:
+                    return SDL_SCANCODE_ESCAPE;
+            }
+            return SDL_SCANCODE_UNKNOWN;
+        }
+
+        SDL_MouseButtonFlags toSdlMouseButtonMask(MouseButton mouseButton)
+        {
+            switch (mouseButton)
+            {
+                case MouseButton::Left:
+                    return SDL_BUTTON_LMASK;
+                case MouseButton::Middle:
+                    return SDL_BUTTON_MMASK;
+                case MouseButton::Right:
+                    return SDL_BUTTON_RMASK;
+            }
+            return 0;
+        }
+    } // namespace
+
     Window::Window(const WindowDescription& description)
     {
         // SDL subsystems are reference counted: each window initialises the
@@ -55,6 +106,10 @@ namespace mage::platform
 
     void Window::pollEvents()
     {
+        // Motion is accumulated over all the events of this call: several
+        // mouse events can arrive between two frames.
+        m_mouseMotion = MouseMotion{};
+
         SDL_Event event;
         while (SDL_PollEvent(&event))
         {
@@ -69,6 +124,11 @@ namespace mage::platform
 
                 case SDL_EVENT_WINDOW_MINIMIZED:
                     m_minimized = true;
+                    break;
+
+                case SDL_EVENT_MOUSE_MOTION:
+                    m_mouseMotion.deltaX += event.motion.xrel;
+                    m_mouseMotion.deltaY += event.motion.yrel;
                     break;
 
                 case SDL_EVENT_WINDOW_RESTORED:
@@ -105,6 +165,33 @@ namespace mage::platform
             .width = static_cast<std::uint32_t>(widthInPixels),
             .height = static_cast<std::uint32_t>(heightInPixels),
         };
+    }
+
+    bool Window::isKeyDown(Key key) const
+    {
+        // SDL keeps an array with the state of every key, indexed by scancode
+        // and updated while events are processed.
+        const bool* keyboardState = SDL_GetKeyboardState(nullptr);
+        return keyboardState[toSdlScancode(key)];
+    }
+
+    bool Window::isMouseButtonDown(MouseButton mouseButton) const
+    {
+        const SDL_MouseButtonFlags pressedButtons = SDL_GetMouseState(nullptr, nullptr);
+        return (pressedButtons & toSdlMouseButtonMask(mouseButton)) != 0;
+    }
+
+    MouseMotion Window::mouseMotion() const
+    {
+        return m_mouseMotion;
+    }
+
+    void Window::setMouseCaptured(bool captured)
+    {
+        if (!SDL_SetWindowRelativeMouseMode(m_sdlWindow, captured))
+        {
+            log::warning("Failed to change the mouse capture mode: {}", SDL_GetError());
+        }
     }
 
     SDL_Window* Window::nativeHandle() const

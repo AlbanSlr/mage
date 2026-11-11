@@ -1,9 +1,11 @@
 #pragma once
 
 #include "vulkan/VulkanApi.hpp"
+#include "vulkan/VulkanBuffer.hpp"
 
 namespace mage::renderer
 {
+    class VulkanAllocator;
     class VulkanDevice;
 
     // Everything needed to record and submit ONE frame.
@@ -11,13 +13,21 @@ namespace mage::renderer
     // The CPU does not wait for the GPU to finish a frame before preparing the
     // next one: several frames are "in flight" at the same time. Each of them
     // needs its own set of these resources, because the GPU may still be
-    // reading the previous frame's command buffer while the CPU writes the
-    // next one. The renderer owns MAX_FRAMES_IN_FLIGHT of these and cycles
-    // through them.
+    // reading the previous frame's command buffer and uniform data while the
+    // CPU writes the next one. The renderer owns MAX_FRAMES_IN_FLIGHT of these
+    // and cycles through them.
     class VulkanFrame
     {
     public:
-        explicit VulkanFrame(const VulkanDevice& device);
+        // `frameDescriptorSetLayout` is the layout of the per-frame descriptor
+        // set (set 0 of the mesh pipeline), allocated from `descriptorPool`.
+        // `frameUniformsSizeInBytes` is the size of the uniform buffer it
+        // points to.
+        VulkanFrame(const VulkanDevice&             device,
+                    const VulkanAllocator&          allocator,
+                    const vk::raii::DescriptorPool& descriptorPool,
+                    vk::DescriptorSetLayout         frameDescriptorSetLayout,
+                    vk::DeviceSize                  frameUniformsSizeInBytes);
 
         // A COMMAND POOL is the memory allocator command buffers are carved
         // from. One pool per frame allows the whole frame's command memory to
@@ -39,6 +49,13 @@ namespace mage::renderer
         // object's resources can be reused for a new frame.
         [[nodiscard]] const vk::raii::Fence& inFlightFence() const;
 
+        // The UNIFORM BUFFER holding the data shared by every object of the
+        // frame (camera, light). The CPU rewrites it each frame.
+        [[nodiscard]] const VulkanBuffer& frameUniformBuffer() const;
+
+        // The descriptor set through which shaders read that uniform buffer.
+        [[nodiscard]] vk::DescriptorSet frameDescriptorSet() const;
+
     private:
         // Declared before the command buffer: the buffer is allocated from the
         // pool and must be destroyed first (members die in reverse order).
@@ -47,5 +64,8 @@ namespace mage::renderer
 
         vk::raii::Semaphore m_imageAvailableSemaphore = nullptr;
         vk::raii::Fence     m_inFlightFence = nullptr;
+
+        VulkanBuffer            m_frameUniformBuffer;
+        vk::raii::DescriptorSet m_frameDescriptorSet = nullptr;
     };
 } // namespace mage::renderer

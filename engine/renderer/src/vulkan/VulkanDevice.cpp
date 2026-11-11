@@ -221,6 +221,31 @@ namespace mage::renderer
                   m_graphicsQueueFamilyIndex);
     }
 
+    vk::Format VulkanDevice::findDepthFormat() const
+    {
+        // Unlike colour formats, no single depth format is guaranteed to exist
+        // on every GPU, so candidates are tried from the most to the least
+        // precise. D32Sfloat stores depth as a 32-bit float.
+        constexpr std::array<vk::Format, 3> CANDIDATE_FORMATS = {
+            vk::Format::eD32Sfloat,
+            vk::Format::eX8D24UnormPack32,
+            vk::Format::eD16Unorm,
+        };
+
+        for (const vk::Format candidateFormat : CANDIDATE_FORMATS)
+        {
+            // Format support depends on how the image is used. The depth
+            // buffer is an optimally-tiled image used as a depth attachment.
+            const vk::FormatProperties formatProperties = m_physicalDevice.getFormatProperties(candidateFormat);
+            if (formatProperties.optimalTilingFeatures & vk::FormatFeatureFlagBits::eDepthStencilAttachment)
+            {
+                return candidateFormat;
+            }
+        }
+
+        throw std::runtime_error("The GPU does not support any depth buffer format");
+    }
+
     const vk::raii::PhysicalDevice& VulkanDevice::physicalDevice() const
     {
         return m_physicalDevice;

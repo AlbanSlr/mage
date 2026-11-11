@@ -14,9 +14,7 @@ namespace mage
     {
         // std::ios::ate opens the file with the cursor at the end, so the
         // cursor position directly gives the file size.
-        // NOLINT: the standard library defines these flags as plain integers on
-        // some platforms, which clang-tidy mistakes for arithmetic on signed values.
-        std::ifstream file(filePath, std::ios::binary | std::ios::ate); // NOLINT(bugprone-signed-bitwise)
+        std::ifstream file(filePath, std::ios::binary | std::ios::ate);
         if (!file.is_open())
         {
             throw std::runtime_error(std::format("Failed to open file '{}'", filePath.string()));

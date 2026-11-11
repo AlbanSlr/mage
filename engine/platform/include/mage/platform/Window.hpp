@@ -1,5 +1,7 @@
 #pragma once
 
+#include <mage/platform/Input.hpp>
+
 #include <cstdint>
 #include <string>
 
@@ -62,11 +64,26 @@ namespace mage::platform
         // screen coordinates the window was created with.
         [[nodiscard]] PixelExtent framebufferExtent() const;
 
+        // --- Input -----------------------------------------------------------------
+        // Input is polled: these return the state as of the last pollEvents().
+
+        [[nodiscard]] bool isKeyDown(Key key) const;
+        [[nodiscard]] bool isMouseButtonDown(MouseButton mouseButton) const;
+
+        // Mouse movement received during the last pollEvents() call.
+        [[nodiscard]] MouseMotion mouseMotion() const;
+
+        // While captured, the cursor is hidden and locked to the window, and
+        // the mouse reports unbounded relative motion: what a first-person
+        // camera needs to keep turning without the cursor hitting a screen edge.
+        void setMouseCaptured(bool captured);
+
         // The underlying SDL window, for code that must talk to SDL directly.
         [[nodiscard]] SDL_Window* nativeHandle() const;
 
     private:
         SDL_Window* m_sdlWindow = nullptr;
+        MouseMotion m_mouseMotion;
         bool        m_closeRequested = false;
         bool        m_minimized = false;
     };

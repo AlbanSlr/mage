@@ -1,6 +1,8 @@
 #include "vulkan/VulkanFrame.hpp"
 
+#include "vulkan/VulkanAllocator.hpp"
 #include "vulkan/VulkanApi.hpp"
+#include "vulkan/VulkanBuffer.hpp"
 #include "vulkan/VulkanDevice.hpp"
 
 #include <utility>
@@ -8,10 +10,23 @@
 
 namespace mage::renderer
 {
-    VulkanFrame::VulkanFrame(const VulkanDevice& device)
+    VulkanFrame::VulkanFrame(const VulkanDevice&             device,
+                             const VulkanAllocator&          allocator,
+                             const vk::raii::DescriptorPool& descriptorPool,
+                             vk::DescriptorSetLayout         frameDescriptorSetLayout,
+                             vk::DeviceSize                  frameUniformsSizeInBytes)
+        : m_frameUniformBuffer(allocator,
+                               VulkanBufferDescription{
+                                   .sizeInBytes = frameUniformsSizeInBytes,
+                                   .usage = vk::BufferUsageFlagBits::eUniformBuffer,
+
+                                   // Rewritten by the CPU every frame.
+                                   .memoryAccess = BufferMemoryAccess::CpuWritable,
+                               })
     {
         const vk::raii::Device& logicalDevice = device.logicalDevice();
 
+        // --- Command pool and buffer --------------------------------------------------
         const vk::CommandPoolCreateInfo commandPoolCreateInfo{
             // Transient: buffers from this pool are re-recorded every frame,
             // which lets the driver pick a suitable allocation strategy.
@@ -35,6 +50,7 @@ namespace mage::renderer
             logicalDevice.allocateCommandBuffers(commandBufferAllocateInfo);
         m_commandBuffer = std::move(commandBuffers.front());
 
+        // --- Synchronisation objects --------------------------------------------------
         m_imageAvailableSemaphore = logicalDevice.createSemaphore(vk::SemaphoreCreateInfo{});
 
         // Created already signalled: the first thing a frame does is wait for
@@ -43,6 +59,35 @@ namespace mage::renderer
         m_inFlightFence = logicalDevice.createFence(vk::FenceCreateInfo{
             .flags = vk::FenceCreateFlagBits::eSignaled,
         });
+
+        // --- Per-frame descriptor set -------------------------------------------------
+        std::vector<vk::raii::DescriptorSet> descriptorSets =
+            logicalDevice.allocateDescriptorSets(vk::DescriptorSetAllocateInfo{
+                .descriptorPool = *descriptorPool,
+                .descriptorSetCount = 1,
+                .pSetLayouts = &frameDescriptorSetLayout,
+            });
+        m_frameDescriptorSet = std::move(descriptorSets.front());
+
+        // Make binding 0 of the set point at the uniform buffer. This is done
+        // once: afterwards only the CONTENT of the buffer changes each frame,
+        // not which buffer the descriptor refers to.
+        const vk::DescriptorBufferInfo bufferInfo{
+            .buffer = m_frameUniformBuffer.handle(),
+            .offset = 0,
+            .range = frameUniformsSizeInBytes,
+        };
+
+        const vk::WriteDescriptorSet descriptorWrite{
+            .dstSet = *m_frameDescriptorSet,
+            .dstBinding = 0,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType = vk::DescriptorType::eUniformBuffer,
+            .pBufferInfo = &bufferInfo,
+        };
+
+        logicalDevice.updateDescriptorSets(descriptorWrite, nullptr);
     }
 
     const vk::raii::CommandPool& VulkanFrame::commandPool() const
@@ -63,5 +108,15 @@ namespace mage::renderer
     const vk::raii::Fence& VulkanFrame::inFlightFence() const
     {
         return m_inFlightFence;
+    }
+
+    const VulkanBuffer& VulkanFrame::frameUniformBuffer() const
+    {
+        return m_frameUniformBuffer;
+    }
+
+    vk::DescriptorSet VulkanFrame::frameDescriptorSet() const
+    {
+        return *m_frameDescriptorSet;
     }
 } // namespace mage::renderer

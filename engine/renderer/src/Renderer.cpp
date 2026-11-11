@@ -1,21 +1,31 @@
-#include "vulkan/TrianglePipeline.hpp"
+#include "RenderResources.hpp"
+#include "vulkan/MeshPipeline.hpp"
+#include "vulkan/VulkanAllocator.hpp"
 #include "vulkan/VulkanApi.hpp"
 #include "vulkan/VulkanDevice.hpp"
 #include "vulkan/VulkanFrame.hpp"
+#include "vulkan/VulkanImage.hpp"
+#include "vulkan/VulkanImageLayout.hpp"
+#include "vulkan/VulkanImmediateCommands.hpp"
 #include "vulkan/VulkanInstance.hpp"
 #include "vulkan/VulkanSurface.hpp"
 #include "vulkan/VulkanSwapchain.hpp"
 
 #include <mage/core/Log.hpp>
+#include <mage/core/Math.hpp>
 #include <mage/platform/FileSystem.hpp>
 #include <mage/platform/VulkanWindowSurface.hpp>
 #include <mage/platform/Window.hpp>
+#include <mage/renderer/Mesh.hpp>
 #include <mage/renderer/Renderer.hpp>
+#include <mage/renderer/Texture.hpp>
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <span>
 #include <vector>
 
 namespace mage::renderer
@@ -31,66 +41,13 @@ namespace mage::renderer
         // Colour the window is cleared to before drawing (linear RGB + alpha).
         constexpr std::array<float, 4> CLEAR_COLOR = {0.02F, 0.02F, 0.03F, 1.0F};
 
+        // Depth the depth buffer is cleared to: 1 is the far plane, so
+        // anything drawn is closer than the initial content.
+        constexpr float CLEAR_DEPTH = 1.0F;
+
         vk::Extent2D toVulkanExtent(platform::PixelExtent extent)
         {
             return vk::Extent2D{.width = extent.width, .height = extent.height};
-        }
-
-        // Describes one change of IMAGE LAYOUT.
-        //
-        // A Vulkan image is always in a "layout" that states what it is
-        // currently used for (being rendered to, being presented, being
-        // sampled by a shader...), and the GPU may physically organise the
-        // pixel data differently for each. The application must move the image
-        // to the right layout before each use, with a pipeline barrier.
-        //
-        // A barrier also carries synchronisation information: which earlier
-        // pipeline stages and memory accesses must be finished (source), and
-        // which later ones must wait for the transition (destination).
-        struct ImageLayoutTransition
-        {
-            vk::ImageLayout         oldLayout = vk::ImageLayout::eUndefined;
-            vk::ImageLayout         newLayout = vk::ImageLayout::eUndefined;
-            vk::PipelineStageFlags2 sourceStage;
-            vk::AccessFlags2        sourceAccess;
-            vk::PipelineStageFlags2 destinationStage;
-            vk::AccessFlags2        destinationAccess;
-        };
-
-        void transitionColorImageLayout(const vk::raii::CommandBuffer& commandBuffer,
-                                        vk::Image                      image,
-                                        const ImageLayoutTransition&   transition)
-        {
-            const vk::ImageMemoryBarrier2 imageBarrier{
-                .srcStageMask = transition.sourceStage,
-                .srcAccessMask = transition.sourceAccess,
-                .dstStageMask = transition.destinationStage,
-                .dstAccessMask = transition.destinationAccess,
-                .oldLayout = transition.oldLayout,
-                .newLayout = transition.newLayout,
-
-                // Barriers can also transfer an image between queue families.
-                // "Ignored" on both sides means no transfer.
-                .srcQueueFamilyIndex = vk::QueueFamilyIgnored,
-                .dstQueueFamilyIndex = vk::QueueFamilyIgnored,
-
-                .image = image,
-                .subresourceRange =
-                    vk::ImageSubresourceRange{
-                        .aspectMask = vk::ImageAspectFlagBits::eColor,
-                        .baseMipLevel = 0,
-                        .levelCount = 1,
-                        .baseArrayLayer = 0,
-                        .layerCount = 1,
-                    },
-            };
-
-            const vk::DependencyInfo dependencyInfo{
-                .imageMemoryBarrierCount = 1,
-                .pImageMemoryBarriers = &imageBarrier,
-            };
-
-            commandBuffer.pipelineBarrier2(dependencyInfo);
         }
     } // namespace
 
@@ -111,17 +68,27 @@ namespace mage::renderer
 
         m_surface = std::make_unique<VulkanSurface>(*m_instance, m_window);
         m_device = std::make_unique<VulkanDevice>(*m_instance, *m_surface);
+        m_allocator = std::make_unique<VulkanAllocator>(*m_instance, *m_device);
+        m_immediateCommands = std::make_unique<VulkanImmediateCommands>(*m_device);
 
         m_swapchain =
             std::make_unique<VulkanSwapchain>(*m_device, *m_surface, toVulkanExtent(m_window.framebufferExtent()));
+        createDepthImage();
 
-        m_trianglePipeline = std::make_unique<TrianglePipeline>(
-            *m_device, m_swapchain->imageFormat(), platform::executableDirectory() / "shaders");
+        m_meshPipeline = std::make_unique<MeshPipeline>(
+            *m_device, m_swapchain->imageFormat(), m_depthImage->format(), platform::executableDirectory() / "shaders");
+
+        m_resources = std::make_unique<RenderResources>(
+            *m_device, *m_allocator, *m_immediateCommands, m_meshPipeline->materialDescriptorSetLayout());
 
         m_frames.reserve(MAX_FRAMES_IN_FLIGHT);
         for (std::uint32_t frameIndex = 0; frameIndex < MAX_FRAMES_IN_FLIGHT; ++frameIndex)
         {
-            m_frames.emplace_back(*m_device);
+            m_frames.emplace_back(*m_device,
+                                  *m_allocator,
+                                  m_resources->descriptorPool(),
+                                  m_meshPipeline->frameDescriptorSetLayout(),
+                                  sizeof(FrameUniforms));
         }
 
         log::info("Vulkan renderer ready");
@@ -138,7 +105,17 @@ namespace mage::renderer
         }
     }
 
-    void Renderer::drawFrame()
+    MeshHandle Renderer::createMesh(const MeshData& meshData)
+    {
+        return m_resources->createMesh(meshData);
+    }
+
+    TextureHandle Renderer::createTexture(const TextureData& textureData)
+    {
+        return m_resources->createTexture(textureData);
+    }
+
+    void Renderer::drawFrame(const FrameDescription& frameDescription)
     {
         // A minimised window has a 0x0 framebuffer, and a swapchain cannot
         // have that size: skip rendering until the window is restored.
@@ -183,10 +160,14 @@ namespace mage::renderer
         // unsignalled forever and deadlock the next wait.
         logicalDevice.resetFences(*frame.inFlightFence());
 
-        // --- 4. Record this frame's commands -----------------------------------------
+        // --- 4. Update this frame's data and record its commands ---------------------
+        // Safe to overwrite: the fence guarantees the GPU has finished reading
+        // what this frame's uniform buffer contained.
+        updateFrameUniforms(frame, frameDescription);
+
         // Resetting the pool recycles the memory of all its command buffers.
         frame.commandPool().reset();
-        recordCommands(frame, acquiredImage.imageIndex);
+        recordCommands(frame, acquiredImage.imageIndex, frameDescription);
 
         // --- 5. Submit the commands to the GPU ---------------------------------------
         // WAIT: do not start writing colours until the acquired image is
@@ -248,7 +229,25 @@ namespace mage::renderer
         m_currentFrameIndex = (m_currentFrameIndex + 1) % MAX_FRAMES_IN_FLIGHT;
     }
 
-    void Renderer::recordCommands(const VulkanFrame& frame, std::uint32_t swapchainImageIndex) const
+    void Renderer::updateFrameUniforms(const VulkanFrame& frame, const FrameDescription& frameDescription) const
+    {
+        const vk::Extent2D extent = m_swapchain->extent();
+        const float        aspectRatio = static_cast<float>(extent.width) / static_cast<float>(extent.height);
+
+        const Camera& camera = frameDescription.camera;
+
+        const FrameUniforms frameUniforms{
+            // Applied right to left: world -> view (camera) space -> clip space.
+            .viewProjectionMatrix = camera.projectionMatrix(aspectRatio) * camera.viewMatrix(),
+            .directionToLight = glm::vec4(glm::normalize(frameDescription.directionToLight), 0.0F),
+        };
+
+        frame.frameUniformBuffer().write(std::as_bytes(std::span(&frameUniforms, 1)));
+    }
+
+    void Renderer::recordCommands(const VulkanFrame&      frame,
+                                  std::uint32_t           swapchainImageIndex,
+                                  const FrameDescription& frameDescription) const
     {
         const vk::raii::CommandBuffer& commandBuffer = frame.commandBuffer();
         const vk::Image                swapchainImage = m_swapchain->image(swapchainImageIndex);
@@ -260,25 +259,49 @@ namespace mage::renderer
             .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit,
         });
 
-        // --- Prepare the image for rendering -----------------------------------------
-        // Undefined -> ColorAttachmentOptimal. "Undefined" as the old layout
-        // means the previous content may be discarded, which is fine because
-        // the image is cleared below.
+        // --- Prepare the images for rendering ----------------------------------------
+        // Colour: Undefined -> ColorAttachmentOptimal. "Undefined" as the old
+        // layout means the previous content may be discarded, which is fine
+        // because the image is cleared below.
         //
         // The source stage is ColorAttachmentOutput on purpose: it is the
         // stage the submission makes wait for the image-available semaphore
         // (Renderer::drawFrame, step 5), so the transition cannot happen before
         // the image has actually been acquired.
-        transitionColorImageLayout(commandBuffer,
-                                   swapchainImage,
-                                   ImageLayoutTransition{
-                                       .oldLayout = vk::ImageLayout::eUndefined,
-                                       .newLayout = vk::ImageLayout::eColorAttachmentOptimal,
-                                       .sourceStage = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-                                       .sourceAccess = vk::AccessFlagBits2::eNone,
-                                       .destinationStage = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-                                       .destinationAccess = vk::AccessFlagBits2::eColorAttachmentWrite,
-                                   });
+        transitionImageLayout(commandBuffer,
+                              swapchainImage,
+                              ImageLayoutTransition{
+                                  .oldLayout = vk::ImageLayout::eUndefined,
+                                  .newLayout = vk::ImageLayout::eColorAttachmentOptimal,
+                                  .sourceStage = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+                                  .sourceAccess = vk::AccessFlagBits2::eNone,
+                                  .destinationStage = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+                                  .destinationAccess = vk::AccessFlagBits2::eColorAttachmentWrite,
+                              });
+
+        // Depth: Undefined -> DepthAttachmentOptimal. The depth buffer is
+        // cleared every frame and never read afterwards, so its old content
+        // can always be discarded.
+        //
+        // The same depth image is shared by all frames in flight. Depth is
+        // read and written during the fragment test stages, so naming those
+        // stages as the source makes this frame wait until the previous
+        // frame has finished using the image.
+        constexpr vk::PipelineStageFlags2 DEPTH_TEST_STAGES =
+            vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests;
+
+        transitionImageLayout(commandBuffer,
+                              m_depthImage->handle(),
+                              ImageLayoutTransition{
+                                  .oldLayout = vk::ImageLayout::eUndefined,
+                                  .newLayout = vk::ImageLayout::eDepthAttachmentOptimal,
+                                  .sourceStage = DEPTH_TEST_STAGES,
+                                  .sourceAccess = vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
+                                  .destinationStage = DEPTH_TEST_STAGES,
+                                  .destinationAccess = vk::AccessFlagBits2::eDepthStencilAttachmentRead
+                                                       | vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
+                                  .aspect = vk::ImageAspectFlagBits::eDepth,
+                              });
 
         // --- Begin rendering ---------------------------------------------------------
         // An ATTACHMENT is an image a draw call writes to. For each one,
@@ -292,6 +315,17 @@ namespace mage::renderer
             .clearValue = vk::ClearValue(vk::ClearColorValue(CLEAR_COLOR)),
         };
 
+        const vk::RenderingAttachmentInfo depthAttachment{
+            .imageView = m_depthImage->view(),
+            .imageLayout = vk::ImageLayout::eDepthAttachmentOptimal,
+            .loadOp = vk::AttachmentLoadOp::eClear,
+
+            // The depth buffer is only needed while drawing: letting the GPU
+            // discard it afterwards saves work on some hardware.
+            .storeOp = vk::AttachmentStoreOp::eDontCare,
+            .clearValue = vk::ClearValue(vk::ClearDepthStencilValue{.depth = CLEAR_DEPTH, .stencil = 0}),
+        };
+
         const vk::Rect2D renderArea{
             .offset = vk::Offset2D{.x = 0, .y = 0},
             .extent = extent,
@@ -302,6 +336,7 @@ namespace mage::renderer
             .layerCount = 1,
             .colorAttachmentCount = 1,
             .pColorAttachments = &colorAttachment,
+            .pDepthAttachment = &depthAttachment,
         };
 
         commandBuffer.beginRendering(renderingInfo);
@@ -323,7 +358,44 @@ namespace mage::renderer
         commandBuffer.setScissor(0, renderArea);
 
         // --- Draw --------------------------------------------------------------------
-        m_trianglePipeline->draw(commandBuffer);
+        m_meshPipeline->bind(commandBuffer);
+
+        // Per-frame data (set 0) is bound once and stays bound for every draw.
+        commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                         m_meshPipeline->layout(),
+                                         MeshPipeline::FRAME_DESCRIPTOR_SET_INDEX,
+                                         frame.frameDescriptorSet(),
+                                         nullptr);
+
+        for (const DrawCommand& drawCommand : frameDescription.drawCommands)
+        {
+            const GpuMesh&    mesh = m_resources->mesh(drawCommand.mesh);
+            const GpuTexture& texture = m_resources->texture(drawCommand.texture);
+
+            // Per-material data (set 1): the texture.
+            commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                             m_meshPipeline->layout(),
+                                             MeshPipeline::MATERIAL_DESCRIPTOR_SET_INDEX,
+                                             *texture.materialDescriptorSet,
+                                             nullptr);
+
+            // Per-object data: push constants, copied into the command buffer.
+            const ObjectPushConstants pushConstants{
+                .modelMatrix = drawCommand.modelMatrix,
+                .normalMatrix = glm::transpose(glm::inverse(drawCommand.modelMatrix)),
+            };
+            commandBuffer.pushConstants<ObjectPushConstants>(
+                m_meshPipeline->layout(), vk::ShaderStageFlagBits::eVertex, 0, pushConstants);
+
+            // Vertex buffer at binding 0 (the binding declared in the pipeline's
+            // vertex input state), starting at byte offset 0.
+            commandBuffer.bindVertexBuffers(0, mesh.vertexBuffer.handle(), vk::DeviceSize{0});
+            commandBuffer.bindIndexBuffer(mesh.indexBuffer.handle(), 0, vk::IndexType::eUint32);
+
+            // indexCount indices, 1 instance, starting at index 0, with 0
+            // added to every index, starting at instance 0.
+            commandBuffer.drawIndexed(mesh.indexCount, 1, 0, 0, 0);
+        }
 
         commandBuffer.endRendering();
 
@@ -332,18 +404,32 @@ namespace mage::renderer
         // requires. The transition waits for the colour writes above; nothing
         // later in this command buffer depends on it (the presentation is
         // synchronised by the render-finished semaphore instead).
-        transitionColorImageLayout(commandBuffer,
-                                   swapchainImage,
-                                   ImageLayoutTransition{
-                                       .oldLayout = vk::ImageLayout::eColorAttachmentOptimal,
-                                       .newLayout = vk::ImageLayout::ePresentSrcKHR,
-                                       .sourceStage = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-                                       .sourceAccess = vk::AccessFlagBits2::eColorAttachmentWrite,
-                                       .destinationStage = vk::PipelineStageFlagBits2::eNone,
-                                       .destinationAccess = vk::AccessFlagBits2::eNone,
-                                   });
+        transitionImageLayout(commandBuffer,
+                              swapchainImage,
+                              ImageLayoutTransition{
+                                  .oldLayout = vk::ImageLayout::eColorAttachmentOptimal,
+                                  .newLayout = vk::ImageLayout::ePresentSrcKHR,
+                                  .sourceStage = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+                                  .sourceAccess = vk::AccessFlagBits2::eColorAttachmentWrite,
+                                  .destinationStage = vk::PipelineStageFlagBits2::eNone,
+                                  .destinationAccess = vk::AccessFlagBits2::eNone,
+                              });
 
         commandBuffer.end();
+    }
+
+    void Renderer::createDepthImage()
+    {
+        // The depth buffer must have exactly the size of the colour images it
+        // is used with. Assigning the unique_ptr destroys the previous one.
+        m_depthImage = std::make_unique<VulkanImage>(*m_device,
+                                                     *m_allocator,
+                                                     VulkanImageDescription{
+                                                         .extent = m_swapchain->extent(),
+                                                         .format = m_device->findDepthFormat(),
+                                                         .usage = vk::ImageUsageFlagBits::eDepthStencilAttachment,
+                                                         .aspect = vk::ImageAspectFlagBits::eDepth,
+                                                     });
     }
 
     void Renderer::recreateSwapchain()
@@ -354,12 +440,13 @@ namespace mage::renderer
             return; // Minimised: drawFrame() will come back here once restored.
         }
 
-        // The old swapchain images and views may still be referenced by
-        // commands the GPU is executing. Waiting for the device to be idle is
-        // the simplest way to make destroying them safe; a resize is rare
-        // enough that the stall does not matter.
+        // The old swapchain images, their views and the depth buffer may
+        // still be referenced by commands the GPU is executing. Waiting for
+        // the device to be idle is the simplest way to make destroying them
+        // safe; a resize is rare enough that the stall does not matter.
         m_device->logicalDevice().waitIdle();
 
         m_swapchain->recreate(windowExtent);
+        createDepthImage();
     }
 } // namespace mage::renderer

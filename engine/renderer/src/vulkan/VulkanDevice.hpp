@@ -34,6 +34,9 @@ namespace mage::renderer
         [[nodiscard]] const vk::raii::PhysicalDevice& physicalDevice() const;
         [[nodiscard]] const vk::raii::Device& logicalDevice() const;
 
+        // The best depth buffer format this GPU can render to.
+        [[nodiscard]] vk::Format findDepthFormat() const;
+
         // The queue used for both rendering and presentation.
         [[nodiscard]] const vk::raii::Queue& graphicsQueue() const;
         [[nodiscard]] std::uint32_t graphicsQueueFamilyIndex() const;
