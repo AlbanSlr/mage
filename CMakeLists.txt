@@ -34,6 +34,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/$<CONFIG>")
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 include(MageProjectOptions)
 include(MageModule)
+include(MageShaders)
 
 if(MAGE_BUILD_TESTS)
     enable_testing()
@@ -51,7 +52,8 @@ if(CMAKE_EXPORT_COMPILE_COMMANDS)
     )
 endif()
 
-# Order matters: dependencies first, then the engine modules, then the apps.
+# Order matters: dependencies first, then the engine modules, shaders and apps.
 add_subdirectory(third_party)
 add_subdirectory(engine)
+add_subdirectory(shaders)
 add_subdirectory(apps)

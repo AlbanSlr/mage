@@ -5,16 +5,34 @@
 #
 # Submodules that are checked out but not yet part of the build are wired in
 # by the milestone that first needs them:
-#   Vulkan-Headers, VulkanMemoryAllocator, SDL  -> Vulkan bring-up
-#   glm                                         -> GPU resources / camera
-#   imgui                                       -> editor shell
-#   tracy                                       -> profiling
+#   VulkanMemoryAllocator, glm  -> GPU resources / camera
+#   imgui                       -> editor shell
+#   tracy                       -> profiling
 
 # --- spdlog (logging backend of mage::core) ---------------------------------
 # Use std::format instead of the bundled fmt library, so MAGE has a single
 # formatting syntax everywhere.
 set(SPDLOG_USE_STD_FORMAT ON CACHE BOOL "" FORCE)
 add_subdirectory(spdlog SYSTEM)
+
+# --- Vulkan-Headers (Vulkan C API + Vulkan-Hpp C++ bindings) ----------------
+# Header-only target Vulkan::Headers. MAGE does not link against a Vulkan
+# library at build time: the Vulkan loader (vulkan-1.dll / libvulkan.so.1,
+# installed with the GPU driver) is opened at runtime by vk::raii::Context.
+add_subdirectory(Vulkan-Headers SYSTEM)
+
+# --- SDL3 (window, input, Vulkan surface creation) ---------------------------
+# Built as a static library so the engine has no SDL3.dll to ship or locate.
+set(SDL_SHARED       OFF CACHE BOOL "" FORCE)
+set(SDL_STATIC       ON  CACHE BOOL "" FORCE)
+set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
+set(SDL_TESTS        OFF CACHE BOOL "" FORCE)
+set(SDL_EXAMPLES     OFF CACHE BOOL "" FORCE)
+add_subdirectory(SDL SYSTEM EXCLUDE_FROM_ALL)
+
+# SDL's own sources produce warnings with recent clang versions. They are not
+# ours to fix, so silence them to keep MAGE's build output readable.
+target_compile_options(SDL3-static PRIVATE -w)
 
 # --- Catch2 (unit tests) ----------------------------------------------------
 if(MAGE_BUILD_TESTS)

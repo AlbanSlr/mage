@@ -1,11 +1,13 @@
 mage_add_module(core
     SOURCES
         src/Assert.cpp
+        src/File.cpp
         src/Log.cpp
     PRIVATE_DEPENDENCIES
         spdlog::spdlog
     TEST_SOURCES
         tests/AssertTests.cpp
+        tests/FileTests.cpp
         tests/LogTests.cpp
 )
 

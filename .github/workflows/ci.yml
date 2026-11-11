@@ -6,6 +6,8 @@ on:
   pull_request:
 
 env:
+  # Slang shader compiler release used to build the shaders (https://github.com/shader-slang/slang).
+  SLANG_VERSION: 2026.22
   # Keep in sync with the clang version used for local development, so that
   # clang-format and clang-tidy give the same results everywhere.
   LLVM_VERSION: 23
@@ -36,13 +38,34 @@ jobs:
           wget -q https://apt.llvm.org/llvm.sh
           chmod +x llvm.sh
           sudo ./llvm.sh "$LLVM_VERSION" all
-          sudo apt-get install -y ninja-build
+          sudo apt-get update
+          # Ninja, plus the windowing headers SDL3 needs to build its X11 and Wayland backends.
+          sudo apt-get install -y ninja-build \
+            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev libxss-dev libxtst-dev \
+            libxkbcommon-dev libwayland-dev wayland-protocols libdecor-0-dev libegl1-mesa-dev libgl1-mesa-dev \
+            libdrm-dev libgbm-dev libdbus-1-dev libibus-1.0-dev libudev-dev
           # Expose the unversioned tool names (clang, clang++, ld.lld, clang-format, clang-tidy).
           echo "/usr/lib/llvm-$LLVM_VERSION/bin" >> "$GITHUB_PATH"
 
       - name: Install clang and Ninja (Windows)
         if: runner.os == 'Windows'
         run: choco install llvm ninja --no-progress -y
+
+      - name: Install the Slang shader compiler (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          wget -q "https://github.com/shader-slang/slang/releases/download/v$SLANG_VERSION/slang-$SLANG_VERSION-linux-x86_64.tar.gz"
+          mkdir -p "$HOME/slang"
+          tar -xzf "slang-$SLANG_VERSION-linux-x86_64.tar.gz" -C "$HOME/slang"
+          echo "$HOME/slang/bin" >> "$GITHUB_PATH"
+
+      - name: Install the Slang shader compiler (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/shader-slang/slang/releases/download/v$env:SLANG_VERSION/slang-$env:SLANG_VERSION-windows-x86_64.zip" -OutFile slang.zip
+          Expand-Archive slang.zip -DestinationPath "$env:USERPROFILE\slang"
+          "$env:USERPROFILE\slang\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
 
       - name: Check formatting
         if: runner.os == 'Linux'

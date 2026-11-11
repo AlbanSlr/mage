@@ -15,7 +15,7 @@ where it is first used.
 | CMake 3.29+ and Ninja | |
 | Vulkan SDK 1.4+ | Validation layers and `slangc` |
 | Windows only: Visual Studio Build Tools | Provides the Windows SDK and the C++ standard library clang uses |
-| Linux only: libstdc++ 13+ | |
+| Linux only: libstdc++ 13+ and the X11/Wayland development packages | SDL3 is built from source; see `.github/workflows/ci.yml` for the package list |
 
 ## Getting the code
 
@@ -33,7 +33,7 @@ Replace `windows-clang` with `linux-clang` on Linux.
 cmake --preset windows-clang                 # configure (once)
 cmake --build --preset windows-clang-debug   # build
 ctest --preset windows-clang-debug           # run the unit tests
-build/windows-clang/bin/Debug/mage_sandbox   # run the sandbox
+build/windows-clang/bin/Debug/mage_sandbox   # run the sandbox (shows a triangle)
 ```
 
 Available configurations: `debug`, `relwithdebinfo`, `release`.
@@ -49,7 +49,7 @@ Available configurations: `debug`, `relwithdebinfo`, `release`.
 ```
 engine/       engine modules (one static library each)
 apps/         executables: sandbox, later the editor
-shaders/      Slang shader sources (from the GPU resources milestone)
+shaders/      Slang shader sources, compiled to SPIR-V at build time
 third_party/  dependencies, as git submodules
 cmake/        build helpers
 docs/         architecture and coding style
